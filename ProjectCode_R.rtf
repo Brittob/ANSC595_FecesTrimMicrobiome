@@ -1,0 +1,398 @@
+{\rtf1\ansi\ansicpg1252\cocoartf2512
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fswiss\fcharset0 ArialMT;}
+{\colortbl;\red255\green255\blue255;}
+{\*\expandedcolortbl;;}
+\margl1440\margr1440\vieww25400\viewh13500\viewkind0
+\pard\tx720\tx1440\tx2160\tx2880\tx3600\tx4320\tx5040\tx5760\tx6480\tx7200\tx7920\tx8640\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf0 ---\
+title: "Britton Data"\
+author: "ANSC595"\
+date: "April 2, 2020"\
+output:\
+  html_document: \
+    toc: true\
+    toc_float: true\
+  pdf_document: default\
+editor_options: \
+  chunk_output_type: console\
+always_allow_html: yes\
+---\
+\
+#Set working directory\
+```\{r setup, include=FALSE\}\
+knitr::opts_chunk$set(echo = TRUE)\
+\
+knitr::opts_knit$set(root.dir = '/Users/briebritton/Desktop/R_Files')\
+```\
+\
+#Data manipulation\
+##Load Packages\
+\
+```\{r Load packages, results="hide"\}\
+library(ape)\
+library(dplyr)\
+library(ggplot2)\
+library(gplots)\
+library(lme4)\
+library(phangorn)\
+library(phyloseq)\
+library(plotly)\
+library(tidyr)\
+library(vegan)\
+library(VennDiagram)\
+library(naniar)\
+library(zoo)\
+```\
+\
+##Load Data\
+```\{r Load data\}\
+OTU1 = read.table("/Users/briebritton/Desktop/R_Files/rarified-table-1.txt", header=TRUE, check.names = FALSE, sep="\\t", stringsAsFactors = F)\
+OTU2 = read.table("/Users/briebritton/Desktop/R_Files/rarified-table-2.txt", header=TRUE, check.names = FALSE, sep="\\t", stringsAsFactors = F)\
+OTU = merge(OTU1, OTU2, by.x = 0, by.y = 0)\
+\
+tax = read.table("/Users/briebritton/Desktop/R_Files/taxonomy.tsv", header=TRUE, sep="\\t")\
+\
+meta = read.table("/Users/briebritton/Desktop/R_Files/Britton_metadata.tsv", header=TRUE, row.names=1, sep="\\t")\
+\
+evenness = read.table("/Users/briebritton/Desktop/R_Files/evenness.tsv", header=TRUE, row.names=1, sep="\\t")\
+\
+faith_pd = read.table("/Users/briebritton/Desktop/R_Files/faith_pd.tsv", header=TRUE, row.names=1, sep="\\t")\
+\
+observed_otus = read.table("/Users/briebritton/Desktop/R_Files/observed_otus.tsv", header=TRUE, row.names=1, sep="\\t")\
+\
+shannon = read.table("/Users/briebritton/Desktop/R_Files/shannon.tsv", header=TRUE, row.names=1, sep="\\t")\
+```\
+\
+```\{r\}\
+str(OTU)\
+row.names(OTU) = OTU[,2]\
+OTU.clean = OTU[,-1:-2]\
+OTU.clean_clean = OTU.clean[,-11815]\
+str(OTU.clean_clean[,11800:11880])\
+```\
+\
+```\{r\}\
+tax2 = separate(tax, Taxon, into = c("Domain", "Phylum", "Class", "Order", "Family", "Genus", "Species"), sep=";")\
+```\
+\
+```\{r\}\
+#All the strings that need to be removed and replaced with NA\
+na_strings <- c(" s__", " g__", " f__", " o__", " c__")\
+\
+tax3 = replace_with_na_all(tax2, condition = ~.x %in% na_strings)\
+```\
+\
+```\{r\}\
+tax3[] <- t(apply(tax3, 1, zoo::na.locf))\
+tax3 = tax3[,-1]\
+tax3_mat <- as.matrix(tax3)\
+row.names(tax3_mat) <- tax2[,1]\
+tax.clean <- as.data.frame(tax3_mat)\
+```\
+\
+```\{r\}\
+tax.clean = tax.clean[row.names(tax.clean) %in% colnames(OTU.clean),]\
+```\
+\
+```\{r\}\
+alpha_diversity = merge(faith_pd, evenness, by.x = 0, by.y = 0)\
+alpha_diversity = merge(alpha_diversity, observed_otus, by.x = "Row.names", by.y = 0)\
+alpha_diversity = merge(alpha_diversity, shannon, by.x = "Row.names", by.y = 0)\
+meta = merge(meta, alpha_diversity, by.x = 0, by.y = "Row.names")\
+row.names(meta) = meta$Row.names\
+meta = meta[,-1]\
+```\
+\
+```\{r Order the data\}\
+OTU.clean = OTU.clean[order(row.names(OTU.clean)),]\
+meta = meta[order(row.names(meta)),]\
+str(meta)\
+```\
+\
+```\{r\}\
+set.seed(10000)\
+```\
+\
+```\{r\}\
+#Create 2x2 plot environment \
+par(mfrow = c(2, 2))\
+\
+#Plots\
+hist(meta$shannon, main="Shannon diversity", xlab="", breaks=10)\
+hist(meta$faith_pd, main="Faith phylogenetic diversity", xlab="", breaks=10)\
+hist(meta$pielou_e, main="Evenness", xlab="", breaks=15)\
+hist(meta$observed_otus, main="Observed OTUs", xlab="", breaks=15)\
+```\
+\
+\
+```\{r\}\
+shapiro.test(meta$shannon)\
+shapiro.test(meta$pielou_e)\
+shapiro.test(meta$faith_pd)\
+shapiro.test(meta$observed_otus)\
+```\
+\
+```\{r\}\
+#by production system (species)\
+aov.observed.species = aov(observed_otus ~ species, data=meta)\
+summary(aov.observed.species)\
+\
+#by production stage (group)\
+aov.observed.group = aov(observed_otus ~ group, data=meta)\
+summary(aov.observed.group)\
+```\
+\
+```\{r\}\
+TukeyHSD(aov.observed.species)\
+TukeyHSD(aov.observed.group)\
+```\
+\
+```\{r\}\
+levels(meta$species)\
+meta$species = factor(meta$species, c("Beef", "Pork", "Poultry"))\
+levels(meta$species)\
+par(mfrow = c(1, 1))\
+boxplot(observed_otus ~ species, data=meta, ylab="Observed OTU")\
+\
+evenness <- ggplot(meta, aes(species, observed_otus)) + \
+  geom_boxplot(aes(color = species)) + \
+  ylim(c(0.5,1)) +\
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5))\
+\
+ggsave("/Users/briebritton/Desktop/R_Files/output/observed_otu-species.png", evenness, height = 3, width = 3)\
+```\
+\
+```\{r\}\
+observed_summary <- meta %>% # the names of the new data frame and the data frame to be summarised\
+  group_by(group) %>%   # the grouping variable\
+  summarise(mean_observed = mean(observed_otus),  # calculates the mean of each group\
+            sd_observed = sd(observed_otus), # calculates the standard deviation of each group\
+            n_observed = n(),  # calculates the sample size per group\
+            se_observed = sd(observed_otus)/sqrt(n())) # calculates the standard error of each group\
+```\
+\
+```\{r\}\
+observed_se <- ggplot(observed_summary, aes(species, mean_observed, fill = species)) + \
+  geom_col() + \
+  geom_errorbar(aes(ymin = mean_observed - se_observed, ymax = mean_observed + se_observed), width=0.2) + \
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +\
+  theme(legend.title = element_blank()) +\
+  labs(y="Observed OTUs \'b1 s.e.", x = "") \
+\
+ggsave("/Users/briebritton/Desktop/R_Files/Output/observed-otu2_se.png", observed_se, height = 3, width = 3)\
+\
+```\
+\
+```\{r\}\
+kruskal.test(faith_pd ~ species, data=meta)\
+kruskal.test(faith_pd ~ group, data=meta)\
+\
+kruskal.test(shannon ~ species, data=meta)\
+kruskal.test(shannon ~ group, data=meta)\
+```\
+\
+```\{r\}\
+pairwise.wilcox.test(meta$shannon, meta$species, p.adjust.method="BH")\
+pairwise.wilcox.test(meta$shannon, meta$group, p.adjust.method="BH")\
+```\
+\
+```\{r\}\
+par(mfrow = c(1, 1))\
+\
+boxplot(faith_pd ~ species, data=meta, ylab="Faith's Phylogenetic diversity")\
+boxplot(faith_pd ~ group, data=meta, ylab="Faith's phylogenetic diversity")\
+```\
+\
+```\{r\}\
+shannon <- ggplot(meta, aes(group, faith_pd)) + \
+  geom_boxplot(aes(color = group)) + \
+  #ylim(c(0.5,1)) +\
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +\
+  theme(legend.title = element_blank()) +\
+  labs(y="Faith's Phylogenetic Diversity", x = "") \
+ggsave("/Users/briebritton/Desktop/R_Files/output/faith_pd-group.png", shannon, height = 3, width = 3)\
+```\
+\
+```\{r\}\
+aov.shannon.all = aov(shannon ~ species*group, data=meta)\
+summary(aov.shannon.all)\
+aov.faith.all = aov(faith_pd ~ species*group, data=meta)\
+summary(aov.faith.all)\
+```\
+\
+```\{r\}\
+TukeyHSD(aov.shannon.all)\
+TukeyHSD(aov.evenness.all2)\
+```\
+\
+```\{r\}\
+BC.nmds = metaMDS(OTU.clean_clean, distance="bray", k=2, trymax=1000)\
+str(OTU.clean)\
+```\
+\
+```\{r\}\
+#if running line-by-line run this entire block at one time.\
+my_colors = c("blue", "green", "red", "black")\
+par(mfrow = c(1, 1))\
+#Create a blank plot for the nmds\
+plot(BC.nmds, type="n", main="Bray-Curtis") \
+#Add the points colored by age\
+points(BC.nmds$points, pch=20, col=my_colors[meta$species])\
+#Add a legend\
+legend(-2.5, -2, legend=levels(meta$species), col=my_colors, pch=20)\
+\
+```\
+\
+\
+```\{r\}\
+BC.nmds2 = metaMDS(OTU.clean_clean, distance="Bray-Curtis", k=2, trymax=1000)\
+\
+#if running line-by-line run this entire block at one time.\
+plot(J.nmds2, type="n", main="Bray-Curtis")\
+points(J.nmds2, display="sites", pch=20, col=my_colors[meta$group])\
+#Add a legend\
+legend(-2, -2, legend=levels(meta$group), col=my_colors, pch=20)\
+```\
+\
+\
+```\{r\}\
+library(qiime2R)\
+\
+physeq<-qza_to_phyloseq(\
+    features="/Users/briebritton/Desktop/R_Files/rarefied_table.qza",\
+    tree="/Users/briebritton/Desktop/R_Files/rooted-tree.qza",\
+    "/Users/briebritton/Desktop/R_Files/taxonomy.qza",\
+    metadata = "/Users/briebritton/Desktop/R_Files/Britton_metadata.tsv"\
+    )\
+```\
+\
+```\{r Bar_charts\}\
+plot_bar(physeq, fill="Phylum")\
+```\
+\
+```\{r\}\
+plot_bar(physeq, x="species", fill="Phylum") \
+```\
+\
+And removing the lines between OTUs in the bars\
+```\{r\}\
+plot_bar(physeq, x="species", fill="Phylum") + geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack")\
+```\
+\
+And only showing the top 5 most abundant phyla\
+```\{r\}\
+#Sort the Phyla by abundance and pick the top 5\
+top5P.names = sort(tapply(taxa_sums(physeq), tax_table(physeq)[, "Phylum"], sum), TRUE)[1:5]\
+#Cut down the physeq data to only the top 5 Phyla\
+top5P = subset_taxa(physeq, Phylum %in% names(top5P.names))\
+#Plot\
+plot_bar(top5P, x="group", fill="Phylum") + geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack")\
+```\
+\
+\
+##Heat maps\
+There are some good options in both `phyloseq` and `gplots` to make heatmaps. We will go through `phyloseq` but know that the same things could be done in `gplots` with code specific to that package.\
+\
+###OTUs\
+We're going to just look at the 20 most abundant OTUs to make it more readable.\
+```\{r Heat_maps\}\
+#Sort the OTUs by abundance and pick the top 20\
+top10OTU.names = names(sort(taxa_sums(physeq), TRUE)[1:10])\
+#Cut down the physeq data to only the top 10 Phyla\
+top10OTU = prune_taxa(top10OTU.names, physeq)\
+```\
+\
+We now see that we only have 20 taxa\
+```\{r\}\
+top10OTU\
+```\
+\
+First, you can make a heatmap of OTU abundance across all samples\
+```\{r\}\
+plot_heatmap(top10OTU)\
+```\
+\
+And grouped by our age groups\
+```\{r\}\
+plot_heatmap(top10OTU, sample.label="species", sample.order="species")\
+```\
+\
+We can label the OTU taxa\
+```\{r\}\
+plot_heatmap(top10OTU, sample.label="species", sample.order="species", taxa.label="Genus")\
+```\
+\
+And group OTUs within the same Phyla\
+```\{r\}\
+plot_heatmap(top10OTU, sample.label="species", sample.order="species", taxa.label="Family", taxa.order="Phylum")\
+ggsave("/Users/briebritton/Desktop/R_Files/Output/heatmap-group.pdf", height=3, width=4, device="pdf")\
+```\
+\
+  left_join(metadata) %>%\
+  #left_join(shannon) %>%\
+  ggplot(aes(x=PC1, y=PC2, color=`species`, shape=`group`)) +\
+  geom_point(alpha=1.0) + #alpha controls transparency and helps when points are overlapping\
+  theme_q2r() +\
+  scale_shape_manual(values=c(16,1), name="Stage of Production") + #see http://www.sthda.com/sthda/RDoc/figure/graphs/r-plot-pch-symbols-points-in-r.png for numeric shape codes\
+  #scale_size_continuous(name="Shannon Diversity") +\
+  scale_color_discrete(name="Production System")\
+  ggsave("/Users/briebritton/Desktop/R_Files/Output/wUF-PCoA.pdf", height=4, width=5, device="pdf") # save a PDF 3 inches by 4 inches\
+  ggsave("/Users/briebritton/Desktop/R_Files/Output/wUF-PCoA_bigger.pdf", height=3, width=4, device="pdf") # save a PDF 3 inches by 4 inches\
+```\
+\
+Now what about ellipses. Everybody wants ellipses\
+\
+```\{r\}\
+wunifrac$data$Vectors %>%\
+  select(SampleID, PC1, PC2) %>%\
+  left_join(metadata) %>%\
+  #left_join(shannon) %>%\
+  ggplot(aes(x=PC1, y=PC2, color=`species`, shape=`group`)) +\
+  geom_point(alpha=1.0) + #alpha controls transparency and helps when points are overlapping\
+  stat_ellipse(aes(color=`species`), level = 0.95) +\
+  theme_q2r() +\
+  scale_shape_manual(values=c(16,1), name="Stage of Production") + #see http://www.sthda.com/sthda/RDoc/figure/graphs/r-plot-pch-symbols-points-in-r.png for numeric shape codes\
+  #scale_size_continuous(name="Shannon Diversity") +\
+  scale_color_discrete(name="Production System")\
+  ggsave("/Users/briebritton/Desktop/R_Files/Output/wUF-PCoA-ellipse.pdf", height=4, width=5, device="pdf") # save a PDF 3 inches by 4 inches\
+  ggsave("/Users/briebritton/Desktop/R_Files/Output/wUF-PCoA-ellipse_bigger.pdf", height=3, width=4, device="pdf") # save a PDF 3 inches by 4 inches\
+```\
+\
+What about if we want another axis, like axis 2 and axis 3\
+\
+```\{r\}\
+wunifrac$data$Vectors %>%\
+  select(SampleID, PC2, PC3) %>%\
+  left_join(metadata) %>%\
+  #left_join(shannon) %>%\
+  ggplot(aes(x=PC2, y=PC3, color=`species`, shape=`group`)) +\
+  geom_point(alpha=0.5) + #alpha controls transparency and helps when points are overlapping\
+  stat_ellipse(aes(color=`species`), level = 0.95) +\
+  theme_q2r() +\
+  scale_shape_manual(values=c(16,1), name="Stage of Production") + #see http://www.sthda.com/sthda/RDoc/figure/graphs/r-plot-pch-symbols-points-in-r.png for numeric shape codes\
+  #scale_size_continuous(name="Shannon Diversity") +\
+  scale_color_discrete(name="Production System")\
+  ggsave("/Users/briebritton/Desktop/R_Files/Output/wUF-PCoA-ellipse-2-3.pdf", height=4, width=5, device="pdf") # save a PDF 3 inches by 4 inches\
+  ggsave("/Users/briebritton/Desktop/R_Files/Output/wUF-PCoA-ellipse-2-3_bigger.pdf", height=3, width=4, device="pdf") # save a PDF 3 inches by 4 inches\
+```\
+\
+\
+\
+############ PLOT A HEATMAP ################\
+We're going to just look at the 20 most abundant OTUs to make it more readable.\
+```\{r Heat_maps\}\
+#Sort the OTUs by abundance and pick the top 20\
+top20OTU.names = names(sort(taxa_sums(physeq), TRUE)[1:20])\
+#Cut down the physeq data to only the top 10 Phyla\
+top20OTU = prune_taxa(top20OTU.names, physeq)\
+```\
+```\{r\}\
+plot_heatmap(top20OTU, sample.label="group", sample.order="group", taxa.label="Genus", taxa.order="Phylum")\
+ggsave("/Users/briebritton/Desktop/R_Files/Output/heatmap-group.pdf", height=3, width=4, device="pdf")\
+```\
+```\{r\}\
+plot_heatmap(top20OTU, sample.label="group", sample.order="group", taxa.label="Genus", low="black", high="blue", na.value="grey")\
+ ggsave("/Users/briebritton/Desktop/R_Files/Output/heatmap-group.pdf", height=3, width=4, device="pdf")\
+```\
+}
